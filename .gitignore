@@ -1,0 +1,27 @@
+# --- secrets (never commit) ---
+kaggle.json
+
+# --- large raw inputs (430 MB; not needed for the dashboard or Pages) ---
+m5-forecasting-accuracy/
+
+# --- course reference material (kept locally; excluded from a public repo) ---
+# Delete these lines if you DO want them published.
+AI Applications in Reorder Point & Inventory Management.png
+Bullwhip effect Implementation.png
+Prof explanation.png
+AI Applications in Re-order point & Inventory Management_Day 2.ipynb
+
+# --- local Claude Code config (machine-specific) ---
+.claude/
+
+# --- python ---
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# --- os / editor cruft ---
+.DS_Store
+Thumbs.db

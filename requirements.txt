@@ -1,0 +1,15 @@
+# AI in Operations - Inventory Intelligence
+#
+# These packages are needed ONLY to (re)generate the dashboard's data and run the
+# tests. The dashboard itself is a single self-contained file (dashboard.html) and
+# needs nothing installed — just open it in a browser.
+#
+# Install with:  pip install -r requirements.txt
+
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
+lightgbm>=4.0
+
+# for the formula tests
+pytest>=7.0

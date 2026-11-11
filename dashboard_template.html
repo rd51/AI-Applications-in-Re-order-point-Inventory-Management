@@ -1,0 +1,568 @@
+<meta charset="utf-8">
+<title>AI Inventory Intelligence</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<script>/*__PLOTLY__*/</script>
+<style>
+/* Layout: fixed control rail (stacks on top at phone width) + tabbed work surface.
+   Palette: cool slate "warehouse" neutrals + amber signal accent + teal for the ML/forecast line.
+   Type: Space Grotesk (display) / Inter (text) / tabular Inter for figures. */
+:root{
+  --bg:#f4f5f7; --panel:#ffffff; --panel-2:#eef0f3; --ink:#1b2430; --muted:#5d6b7e;
+  --line:#dfe3e9; --accent:#d98324; --accent-ink:#9c5a12;
+  --teal:#2f7d78; --blue:#3a6ea5; --red:#c0453b; --green:#3f8f52; --violet:#7a5aa6;
+  --good:#3f8f52; --warn:#c98a1e; --bad:#c0453b;
+  --shadow:0 1px 2px rgba(20,30,45,.06),0 8px 24px rgba(20,30,45,.06);
+  --r:12px;
+  --f-disp:"Space Grotesk",ui-sans-serif,system-ui,sans-serif;
+  --f-text:"Inter",ui-sans-serif,system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#10151c; --panel:#171e28; --panel-2:#1d2631; --ink:#e7ecf3; --muted:#9aa7b7;
+  --line:#2a333f; --accent:#eca94f; --accent-ink:#f2bd70;
+  --teal:#4fb3ac; --blue:#6fa3d6; --red:#e2706a; --green:#5fb873; --violet:#a98ad0;
+  --good:#5fb873; --warn:#e3b05a; --bad:#e2706a;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#10151c; --panel:#171e28; --panel-2:#1d2631; --ink:#e7ecf3; --muted:#9aa7b7;
+  --line:#2a333f; --accent:#eca94f; --accent-ink:#f2bd70;
+  --teal:#4fb3ac; --blue:#6fa3d6; --red:#e2706a; --green:#5fb873; --violet:#a98ad0;
+  --good:#5fb873; --warn:#e3b05a; --bad:#e2706a;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{font-family:var(--f-text);background:var(--bg);color:var(--ink);line-height:1.5;
+  -webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:var(--f-disp);text-wrap:balance;margin:0;font-weight:600;letter-spacing:-.01em}
+.num{font-variant-numeric:tabular-nums}
+a{color:var(--accent-ink)}
+.wrap{display:grid;grid-template-columns:300px minmax(0,1fr);gap:22px;
+  max-width:1280px;margin:0 auto;
+  padding-block:22px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px))}
+@media (max-width:860px){.wrap{grid-template-columns:1fr;gap:16px}}
+
+/* ---- control rail ---- */
+.rail{position:sticky;top:env(safe-area-inset-top,0px);align-self:start;
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--shadow);padding:18px;max-height:calc(100vh - 34px);overflow:auto}
+@media (max-width:860px){.rail{position:static;max-height:none}}
+.rail h2{font-size:15px;letter-spacing:.02em}
+.rail .sub{color:var(--muted);font-size:12px;margin:2px 0 16px}
+.field{margin:14px 0}
+.field label{display:flex;justify-content:space-between;align-items:baseline;
+  font-size:12.5px;font-weight:600;margin-bottom:6px;gap:8px}
+.field label .val{color:var(--accent-ink);font-variant-numeric:tabular-nums;font-weight:700}
+select{width:100%;padding:9px 10px;border-radius:9px;border:1px solid var(--line);
+  background:var(--panel-2);color:var(--ink);font:inherit;font-size:13px}
+input[type=range]{width:100%;accent-color:var(--accent);height:22px}
+.rail .divider{height:1px;background:var(--line);margin:16px 0}
+.rail .assumed{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+  display:flex;align-items:center;gap:8px;margin-bottom:2px}
+.pill{display:inline-block;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;
+  padding:2px 7px;border-radius:999px;font-weight:700}
+.pill.real{background:color-mix(in srgb,var(--teal) 18%,transparent);color:var(--teal)}
+.pill.assumed{background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent-ink)}
+.hint{font-size:11.5px;color:var(--muted);margin-top:4px}
+
+/* ---- header + tabs ---- */
+.head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:4px}
+.head h1{font-size:26px}
+.head p{color:var(--muted);margin:6px 0 0;font-size:13.5px;max-width:62ch}
+.theme-btn{flex:none;border:1px solid var(--line);background:var(--panel);color:var(--ink);
+  border-radius:9px;padding:7px 10px;cursor:pointer;font:inherit;font-size:12px;box-shadow:var(--shadow)}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin:18px 0 16px;border-bottom:1px solid var(--line)}
+.tab{appearance:none;border:0;background:none;color:var(--muted);font:inherit;font-weight:600;
+  font-size:13.5px;padding:9px 14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+
+/* ---- cards / kpis ---- */
+.grid{display:grid;gap:14px}
+.kpis{grid-template-columns:repeat(4,1fr)}
+@media (max-width:720px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--shadow);padding:16px}
+.kpi .k-label{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;
+  display:flex;align-items:center;gap:5px}
+.kpi .k-val{font-family:var(--f-disp);font-size:26px;font-weight:600;margin-top:6px;
+  font-variant-numeric:tabular-nums;line-height:1}
+.kpi .k-sub{font-size:11.5px;color:var(--muted);margin-top:5px}
+.k-val.good{color:var(--good)} .k-val.warn{color:var(--warn)} .k-val.bad{color:var(--bad)}
+.chart{width:100%}
+.section-t{margin:22px 0 10px;font-size:17px}
+.lead{color:var(--muted);font-size:13.5px;max-width:70ch;margin:0 0 6px}
+.cap{color:var(--muted);font-size:12px;margin-top:8px;max-width:72ch}
+.panel-pad{padding:16px}
+.two{display:grid;grid-template-columns:3fr 2fr;gap:14px}
+@media (max-width:760px){.two{grid-template-columns:1fr}}
+.banner{border-radius:var(--r);padding:12px 14px;font-size:13px;display:flex;gap:9px;align-items:flex-start}
+.banner.warn{background:color-mix(in srgb,var(--warn) 14%,transparent);border:1px solid color-mix(in srgb,var(--warn) 40%,transparent)}
+.banner.good{background:color-mix(in srgb,var(--good) 13%,transparent);border:1px solid color-mix(in srgb,var(--good) 38%,transparent)}
+.banner b{font-weight:700}
+.row-between{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+table.mt{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+table.mt th,table.mt td{text-align:right;padding:8px 10px;border-bottom:1px solid var(--line)}
+table.mt th:first-child,table.mt td:first-child{text-align:left}
+table.mt thead th{color:var(--muted);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.04em}
+table.mt tr.best td{background:color-mix(in srgb,var(--good) 12%,transparent)}
+.chk{display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer;user-select:none}
+.chk input{width:16px;height:16px;accent-color:var(--accent)}
+.formula{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+  font-family:var(--f-disp);font-size:15px;overflow-x:auto}
+.formula .muted{color:var(--muted);font-size:12px;font-family:var(--f-text)}
+.btn{appearance:none;border:1px solid var(--accent);background:var(--accent);color:#fff;
+  font:inherit;font-weight:600;font-size:13px;padding:9px 16px;border-radius:9px;cursor:pointer}
+:root[data-theme="dark"] .btn,:root:not([data-theme="light"]) .btn{color:#17120a}
+.btn:hover{filter:brightness(1.05)}
+.sub-controls{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.foot{color:var(--muted);font-size:11.5px;margin-top:26px;padding-top:14px;border-top:1px solid var(--line);
+  max-width:88ch;line-height:1.6}
+.loading{padding:60px 20px;text-align:center;color:var(--muted)}
+.eq{display:inline-block}
+.src-tag{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-left:6px}
+</style>
+
+<div class="wrap" id="app">
+  <div class="loading" style="grid-column:1/-1">Loading dashboard…</div>
+</div>
+
+<script id="inv-data" type="application/json">/*__DATA__*/</script>
+<script>
+"use strict";
+// ============================ data ============================
+const DATA = JSON.parse(document.getElementById("inv-data").textContent);
+const SKUS = DATA.skus;
+const SKU_BY = Object.fromEntries(SKUS.map(s=>[s.sku,s]));
+
+// ============================ stats ============================
+const SQRT2PI=Math.sqrt(2*Math.PI);
+function erf(x){ // Abramowitz-Stegun 7.1.26
+  const s=x<0?-1:1; x=Math.abs(x);
+  const t=1/(1+0.3275911*x);
+  const y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);
+  return s*y;
+}
+const normCdf=x=>0.5*(1+erf(x/Math.SQRT2));
+const normPdf=x=>Math.exp(-0.5*x*x)/SQRT2PI;
+function normPpf(p){ // Acklam's inverse normal CDF
+  if(p<=0)return -Infinity; if(p>=1)return Infinity;
+  const a=[-3.969683028665376e+01,2.209460984245205e+02,-2.759285104469687e+02,1.383577518672690e+02,-3.066479806614716e+01,2.506628277459239e+00];
+  const b=[-5.447609879822406e+01,1.615858368580409e+02,-1.556989798598866e+02,6.680131188771972e+01,-1.328068155288572e+01];
+  const c=[-7.784894002430293e-03,-3.223964580411365e-01,-2.400758277161838e+00,-2.549732539343734e+00,4.374664141464968e+00,2.938163982698783e+00];
+  const d=[7.784695709041462e-03,3.224671290700398e-01,2.445134137142996e+00,3.754408661907416e+00];
+  const pl=0.02425,ph=1-pl; let q,r;
+  if(p<pl){q=Math.sqrt(-2*Math.log(p));return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}
+  if(p<=ph){q=p-0.5;r=q*q;return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);}
+  q=Math.sqrt(-2*Math.log(1-p));return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+}
+// seeded RNG (mulberry32) + normal draws (Box-Muller)
+function rng(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return ((t^t>>>14)>>>0)/4294967296;};}
+
+// ============================ inventory maths (ports of inventory.py) ============================
+const zFromSL=sl=>normPpf(sl);
+function sigmaLT(sigmaD,L,Dbar,sigmaL){return Math.sqrt(sigmaD*sigmaD*L+Dbar*Dbar*sigmaL*sigmaL);}
+function safetyStock(sl,sigmaD,L,Dbar,sigmaL){return zFromSL(sl)*sigmaLT(sigmaD,L,Dbar,sigmaL);}
+function reorderPoint(Dbar,L,ss){return Dbar*L+ss;}
+function expectedShortage(sl,sigmaD,L,Dbar,sigmaL){
+  const z=zFromSL(sl);const s=sigmaLT(sigmaD,L,Dbar,sigmaL);
+  return s*(normPdf(z)-z*(1-normCdf(z)));
+}
+function totalCost(sl,sigmaD,L,Dbar,h,p,sigmaL,N){
+  const z=zFromSL(sl);const ss=safetyStock(sl,sigmaD,L,Dbar,sigmaL);
+  const rop=reorderPoint(Dbar,L,ss);const holding=h*ss;
+  const stockout=p*expectedShortage(sl,sigmaD,L,Dbar,sigmaL)*N;
+  return {service_level:sl,z,safety_stock:ss,reorder_point:rop,holding_cost:holding,stockout_cost:stockout,total_cost:holding+stockout};
+}
+function monteCarlo(rop,sigmaD,L,Dbar,sigmaL,nTrials,seed,empiricalPool){
+  const r=rng(seed);let stockouts=0,shortageSum=0;
+  const gauss=()=>{const u1=Math.max(r(),1e-12),u2=r();return Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);};
+  const pool=empiricalPool,poolN=pool?pool.length:0;
+  for(let i=0;i<nTrials;i++){
+    let L_i=sigmaL>0?Math.max(1,Math.round(L+sigmaL*gauss())):Math.round(L);
+    let d=0;
+    if(pool){for(let k=0;k<L_i;k++)d+=pool[(r()*poolN)|0];}
+    else{for(let k=0;k<L_i;k++)d+=Dbar+sigmaD*gauss();}
+    if(d>rop){stockouts++;shortageSum+=(d-rop);}
+  }
+  return {achieved_service_level:1-stockouts/nTrials,stockout_rate:stockouts/nTrials,mean_shortage_units:shortageSum/nTrials,n_trials:nTrials};
+}
+// constrained cost-optimal service level: adaptive coarse->fine search of the cost curve
+function optimiseServiceLevel(sigmaD,L,Dbar,h,p,sigmaL,N,floor){
+  let lo=Math.max(0.5,floor),hi=0.999,best=null;
+  for(let pass=0;pass<4;pass++){
+    const step=(hi-lo)/60;let localBest=null;
+    for(let sl=lo;sl<=hi+1e-9;sl+=step){
+      const slc=Math.min(0.999,Math.max(0.5,sl));
+      const c=totalCost(slc,sigmaD,L,Dbar,h,p,sigmaL,N);
+      if(slc>=floor-1e-9&&(localBest===null||c.total_cost<localBest.total_cost))localBest={sl:slc,c};
+    }
+    best=localBest;const span=(hi-lo)/6;lo=Math.max(floor,best.sl-span);hi=Math.min(0.999,best.sl+span);
+  }
+  return best;
+}
+
+// ============================ bullwhip (port of bullwhip.py) ============================
+const TIER_NAMES=["Retailer","Distributor","Wholesaler","Manufacturer"];
+function bwForecast(signal,window,ai){
+  const T=signal.length,w=ai?window*2:window;const mu=new Array(T),sg=new Array(T);
+  for(let t=0;t<T;t++){const lo=Math.max(0,t-w);const hist=t>0?signal.slice(lo,t):signal.slice(0,1);
+    const m=hist.reduce((a,b)=>a+b,0)/hist.length;mu[t]=m;
+    if(hist.length>1){const v=hist.reduce((a,b)=>a+(b-m)*(b-m),0)/hist.length;sg[t]=Math.sqrt(v);}else sg[t]=0;}
+  if(ai)for(let t=0;t<T;t++)sg[t]*=0.5;
+  return {mu,sg};
+}
+function variance(arr){const m=arr.reduce((a,b)=>a+b,0)/arr.length;return arr.reduce((a,b)=>a+(b-m)*(b-m),0)/arr.length;}
+function bwSimulate(customer,{leadTime=2,maWindow=4,z=1,sharedInfo=false,aiForecasting=false}={}){
+  const T=customer.length,custVar=variance(customer);
+  const streams=[customer.slice()],amp=[1],labels=["Customer"];let observed=customer.slice();
+  for(let i=0;i<4;i++){
+    const basis=sharedInfo?customer:observed;const {mu,sg}=bwForecast(basis,maWindow,aiForecasting);
+    const S=mu.map((m,t)=>leadTime*m+z*sg[t]);
+    const orders=S.map((s,t)=>Math.max(0,observed[t]+(t===0?0:S[t]-S[t-1])));
+    streams.push(orders);amp.push(custVar>0?variance(orders)/custVar:NaN);labels.push(TIER_NAMES[i]);observed=orders;
+  }
+  return {labels,streams,amplification:amp,customer_var:custVar};
+}
+
+// ============================ state ============================
+const S={sku:SKUS[0].sku,model:"best",service_level:0.95,lead_time:7,lead_std:2.0,holding:2.0,stockout:25.0,cycles:12,
+  mc_empirical:false,bw_shared:false,bw_ai:false,opt_floor:0.90,tab:0,opt_result:null};
+
+function activeModelKey(s){return S.model==="best"?s.best_model:(s.models[S.model]?S.model:s.best_model);}
+function curSku(){return SKU_BY[S.sku];}
+function curModel(){const s=curSku();return s.models[activeModelKey(s)];}
+
+// ============================ formatting ============================
+const fmt0=x=>Math.round(x).toLocaleString("en-US");
+const fmt1=x=>x.toLocaleString("en-US",{minimumFractionDigits:1,maximumFractionDigits:1});
+const fmt2=x=>x.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const pct=x=>(x*100).toLocaleString("en-US",{minimumFractionDigits:1,maximumFractionDigits:1})+"%";
+
+// ============================ plotly theming ============================
+function cssv(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+function baseLayout(extra){
+  const ink=cssv("--ink"),muted=cssv("--muted"),line=cssv("--line");
+  return Object.assign({
+    paper_bgcolor:"rgba(0,0,0,0)",plot_bgcolor:"rgba(0,0,0,0)",
+    font:{family:"Inter, sans-serif",color:muted,size:12},
+    margin:{l:48,r:14,t:10,b:36},
+    xaxis:{gridcolor:line,zerolinecolor:line,linecolor:line,tickfont:{color:muted}},
+    yaxis:{gridcolor:line,zerolinecolor:line,linecolor:line,tickfont:{color:muted}},
+    legend:{orientation:"h",y:1.12,x:0,font:{color:ink,size:11.5}},
+    hoverlabel:{font:{family:"Inter"}}
+  },extra||{});
+}
+const PCFG={displayModeBar:false,responsive:true};
+const charts={};
+function draw(id,traces,layout){const el=document.getElementById(id);if(!el)return;
+  Plotly.react(el,traces,baseLayout(layout),PCFG);charts[id]=true;}
+
+// ============================ rendering ============================
+function el(html){const t=document.createElement("template");t.innerHTML=html.trim();return t.content.firstChild;}
+
+function renderShell(){
+  const app=document.getElementById("app");
+  app.innerHTML=`
+  <aside class="rail">
+    <h2>Inventory controls</h2>
+    <div class="sub">Real demand — Walmart M5 · ${DATA.meta.store.replace("Walmart M5 - ","")}</div>
+
+    <div class="field">
+      <label for="sku">Product (SKU) <span class="pill real">real demand</span></label>
+      <select id="sku">${SKUS.map(s=>`<option value="${s.sku}">${s.sku.replace(/_/g," ")}</option>`).join("")}</select>
+    </div>
+    <div class="field">
+      <label for="model">Forecast model</label>
+      <select id="model">
+        <option value="best">best (auto-select)</option>
+        <option value="lightgbm">lightgbm (ML)</option>
+        <option value="seasonal_naive">seasonal naive</option>
+        <option value="naive">naive</option>
+      </select>
+      <div class="hint">“best” uses whichever model scores the lowest error on held-out data.</div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="assumed">Assumed inputs <span class="pill assumed">you set these</span></div>
+    <div class="hint" style="margin:4px 0 10px">Lead time &amp; costs are a planner's inputs from a supplier contract &amp; finance — not observed data.</div>
+
+    <div class="field"><label for="sl">Target service level <span class="val" id="sl-v"></span></label>
+      <input type="range" id="sl" min="0.50" max="0.999" step="0.005"></div>
+    <div class="field"><label for="lt">Lead time (days) <span class="val" id="lt-v"></span></label>
+      <input type="range" id="lt" min="1" max="30" step="1"></div>
+    <div class="field"><label for="ls">Lead-time variability (std days) <span class="val" id="ls-v"></span></label>
+      <input type="range" id="ls" min="0" max="10" step="0.5"></div>
+    <div class="field"><label for="hc">Holding cost ($/unit/yr) <span class="val" id="hc-v"></span></label>
+      <input type="range" id="hc" min="0.1" max="20" step="0.1"></div>
+    <div class="field"><label for="sc">Stockout cost ($/unit short) <span class="val" id="sc-v"></span></label>
+      <input type="range" id="sc" min="1" max="200" step="1"></div>
+    <div class="field"><label for="cy">Replenishment cycles / yr <span class="val" id="cy-v"></span></label>
+      <input type="range" id="cy" min="4" max="52" step="1"></div>
+  </aside>
+
+  <main>
+    <div class="head">
+      <div>
+        <h1>AI Inventory Intelligence</h1>
+        <p>Classical reorder-point maths, upgraded with machine-learning demand forecasting — on real Walmart sales (M5, ${DATA.meta.date_min} → ${DATA.meta.date_max}).</p>
+      </div>
+      <button class="theme-btn" id="theme" title="Toggle theme">◐ Theme</button>
+    </div>
+    <div class="tabs" role="tablist">
+      ${["Overview","Demand Forecasting","Safety Stock &amp; ROP","Optimise &amp; Bullwhip"].map((t,i)=>
+        `<button class="tab" role="tab" id="tab${i}" aria-selected="${i===0}" data-i="${i}">${t}</button>`).join("")}
+    </div>
+    <div id="panel"></div>
+    <div class="foot">
+      <b>Data &amp; references.</b> Demand data: M5 Forecasting – Accuracy (Walmart), Kaggle — real daily unit sales, prices/promos, event calendar and California SNAP days.
+      Single source of truth / supplier data sharing: Walmart Luminate &amp; Retail Link. Probabilistic demand forecasting: Amazon Science. Bullwhip effect: Lee, Padmanabhan &amp; Whang (1997).
+      Lead times and costs are user-set assumptions, not observed data. Forecasts (σ_D, held-out scores) were computed once with the real LightGBM/baseline pipeline and baked in; all inventory maths run live in your browser.
+    </div>
+  </main>`;
+
+  // bind controls
+  const bind=(id,key,fmt,after)=>{const i=document.getElementById(id);i.value=S[key];
+    const span=document.getElementById(id+"-v");if(span)span.textContent=fmt(S[key]);
+    i.addEventListener("input",()=>{S[key]=parseFloat(i.value);if(span)span.textContent=fmt(S[key]);if(after)after();renderPanel();});};
+  document.getElementById("sku").value=S.sku;
+  document.getElementById("model").value=S.model;
+  document.getElementById("sku").addEventListener("change",e=>{S.sku=e.target.value;S.opt_result=null;S.mc_empirical=curSku().intermittent;renderPanel();});
+  document.getElementById("model").addEventListener("change",e=>{S.model=e.target.value;renderPanel();});
+  bind("sl","service_level",v=>pct(v));
+  bind("lt","lead_time",v=>v+" d");
+  bind("ls","lead_std",v=>fmt1(v)+" d");
+  bind("hc","holding",v=>"$"+fmt1(v));
+  bind("sc","stockout",v=>"$"+fmt0(v));
+  bind("cy","cycles",v=>String(v));
+  document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>{
+    S.tab=+t.dataset.i;document.querySelectorAll(".tab").forEach(x=>x.setAttribute("aria-selected",x===t));renderPanel();}));
+  document.getElementById("theme").addEventListener("click",toggleTheme);
+  S.mc_empirical=curSku().intermittent;
+}
+
+function kpiCard(label,val,sub,cls){return `<div class="card kpi"><div class="k-label">${label}</div>
+  <div class="k-val ${cls||""} num">${val}</div><div class="k-sub">${sub||""}</div></div>`;}
+
+function renderPanel(){
+  const s=curSku(),m=curModel(),mk=activeModelKey(s);
+  const Dbar=s.demand_mean,sigmaD=m.sigma_d;
+  const ss=safetyStock(S.service_level,sigmaD,S.lead_time,Dbar,S.lead_std);
+  const rop=reorderPoint(Dbar,S.lead_time,ss);
+  const cost=totalCost(S.service_level,sigmaD,S.lead_time,Dbar,S.holding,S.stockout,S.lead_std,S.cycles);
+  const p=document.getElementById("panel");
+  const ctx={s,m,mk,Dbar,sigmaD,ss,rop,cost};
+  if(S.tab===0)renderOverview(p,ctx);
+  else if(S.tab===1)renderForecast(p,ctx);
+  else if(S.tab===2)renderSafety(p,ctx);
+  else renderOptimise(p,ctx);
+}
+
+function renderOverview(p,{s,m,mk,Dbar,sigmaD,ss,rop,cost}){
+  p.innerHTML=`
+    ${s.intermittent?`<div class="banner warn" style="margin-bottom:14px"><span>⚠</span><div><b>${s.sku.replace(/_/g," ")}</b> is an intermittent slow mover — about ${fmt0(s.zero_day_pct)}% of days have zero sales. The Normal safety-stock formula assumes smooth demand, so treat its numbers here as unreliable (see the Safety Stock tab's Monte Carlo check).</div></div>`:""}
+    <div class="grid kpis">
+      ${kpiCard("Forecast error (WAPE)",fmt1(m.metrics.WAPE)+"%",`Model: ${mk.replace(/_/g," ")} · lower is better`)}
+      ${kpiCard("Safety stock",fmt0(ss)+" u",`Buffer vs demand &amp; lead-time risk`)}
+      ${kpiCard("Reorder point",fmt0(rop)+" u",`Reorder when stock hits this level`)}
+      ${kpiCard("Projected annual cost","$"+fmt0(cost.total_cost),`Holding + expected stockout`)}
+    </div>
+    <h3 class="section-t">Recent demand vs forecast</h3>
+    <div class="card"><div id="ov-chart" class="chart" style="height:360px"></div></div>
+    <p class="cap">Real-world anchor: Amazon forecasts demand as a <i>range</i>, not a single number — that range (σ_D) is exactly what sets how much safety stock to carry. The dashed line is the held-out forecast, never scored on data it trained on.</p>`;
+  const recent=s.recent, ho=m.holdout;
+  draw("ov-chart",[
+    {x:recent.date,y:recent.units,name:"Actual demand",mode:"lines",line:{color:cssv("--blue"),width:1.8}},
+    {x:ho.date,y:ho.y_pred,name:"Forecast (held-out)",mode:"lines",line:{color:cssv("--accent"),width:2.2,dash:"dash"}}
+  ],{yaxis:{title:{text:"Units / day",font:{size:11}},gridcolor:cssv("--line")},height:360});
+}
+
+function renderForecast(p,{s,m,mk,sigmaD}){
+  const order=["naive","seasonal_naive","lightgbm"].filter(k=>s.all_metrics[k]);
+  const best=s.best_model;
+  const cols=["WAPE","MAPE","MAE","RMSE"];
+  const mins=Object.fromEntries(cols.map(c=>[c,Math.min(...order.map(k=>s.all_metrics[k][c]))]));
+  const rows=order.map(k=>`<tr class="${k===best?"best":""}">
+    <td>${k.replace(/_/g," ")}${k===best?' <span class="pill real" style="margin-left:4px">best</span>':""}</td>
+    ${cols.map(c=>`<td style="${s.all_metrics[k][c]===mins[c]?"font-weight:700;color:var(--good)":""}">${fmt2(s.all_metrics[k][c])}</td>`).join("")}</tr>`).join("");
+  const mlWins=best==="lightgbm";
+  p.innerHTML=`
+    <h3 class="section-t" style="margin-top:4px">How well can we predict demand?</h3>
+    <p class="lead">Every model is scored on the <b>last ${DATA.meta.horizon_days} days, held out</b> from training — never on data it has already seen. The reference notebook scored on its own training data, which always looks perfect and means nothing.</p>
+    <div class="card panel-pad" style="overflow-x:auto">
+      <table class="mt"><thead><tr><th>model</th>${cols.map(c=>`<th>${c}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
+    </div>
+    <div class="banner ${mlWins?"good":"warn"}" style="margin:14px 0">
+      <span>${mlWins?"✓":"ℹ"}</span>
+      <div>Lowest held-out error: <b>${best.replace(/_/g," ")}</b> (WAPE ${fmt1(s.all_metrics[best].WAPE)}%).
+      ${mlWins?"Machine learning beats the naive baseline here — it found the weekly seasonality, price and event signal."
+      :"A simple baseline wins here — machine learning does <b>not</b> always help, and the dashboard auto-selects the honest best per SKU rather than assuming ML wins."}</div>
+    </div>
+    <div class="two">
+      <div class="card"><h4 style="font-size:13px;margin-bottom:8px">Held-out: actual vs forecast (${mk.replace(/_/g," ")})</h4>
+        <div id="fc-line" class="chart" style="height:300px"></div></div>
+      <div class="card"><h4 style="font-size:13px;margin-bottom:8px">Forecast error distribution</h4>
+        <div id="fc-hist" class="chart" style="height:220px"></div>
+        <div class="row-between" style="margin-top:8px">
+          <span class="k-label">σ_D (std of forecast error)</span>
+          <span class="num" style="font-family:var(--f-disp);font-size:20px">${fmt2(sigmaD)} <span style="font-size:12px;color:var(--muted)">u/day</span></span>
+        </div>
+        <div class="hint">This is the number that flows straight into the safety-stock formula.</div>
+      </div>
+    </div>`;
+  const ho=m.holdout;
+  draw("fc-line",[
+    {x:ho.date,y:ho.y_true,name:"Actual",mode:"lines+markers",line:{color:cssv("--blue")},marker:{size:5}},
+    {x:ho.date,y:ho.y_pred,name:"Forecast",mode:"lines+markers",line:{color:cssv("--accent")},marker:{size:5}}
+  ],{height:300});
+  draw("fc-hist",[{x:m.residuals,type:"histogram",nbinsx:15,marker:{color:cssv("--teal")}}],
+    {height:220,xaxis:{title:{text:"Actual − Forecast",font:{size:10}},gridcolor:cssv("--line")},yaxis:{title:{text:"Days",font:{size:10}}},bargap:0.05});
+}
+
+function renderSafety(p,{s,Dbar,sigmaD,ss,rop}){
+  const z=zFromSL(S.service_level);const base=Dbar*S.lead_time;
+  const mc=monteCarlo(rop,sigmaD,S.lead_time,Dbar,S.lead_std,20000,DATA.meta.seed,S.mc_empirical?s.daily_units:null);
+  const gap=mc.achieved_service_level-S.service_level;
+  const ok=Math.abs(gap)<=0.03;
+  p.innerHTML=`
+    <h3 class="section-t" style="margin-top:4px">Safety stock &amp; reorder point, live</h3>
+    <div class="formula" style="margin-bottom:14px">SS = Z · √( σ_D²·L + D̄²·σ_L² ) &nbsp;&nbsp;&nbsp; ROP = D̄·L + SS
+      <div class="muted" style="margin-top:6px">σ_D comes from <b>forecast error</b> (the held-out residuals), not the raw demand series — the honest link from the forecasting tab to here.</div></div>
+    <div class="grid kpis">
+      ${kpiCard("Z (service factor)",fmt2(z))}
+      ${kpiCard("σ_D (from forecast)",fmt2(sigmaD))}
+      ${kpiCard("Safety stock",fmt0(ss)+" u")}
+      ${kpiCard("Reorder point",fmt0(rop)+" u")}
+    </div>
+    <p class="cap">Reorder point = <b>${fmt0(base)}</b> (expected demand over the lead time) + <b>${fmt0(ss)}</b> (safety buffer).</p>
+
+    <h3 class="section-t">Monte Carlo reality check</h3>
+    <p class="lead">The formula <i>claims</i> a service level; this simulation <b>tests</b> it by replaying ${fmt0(20000)} lead-time windows and measuring how often you'd actually run out. A trustworthy formula makes the two match.</p>
+    <label class="chk" style="margin:4px 0 14px"><input type="checkbox" id="mc-emp" ${S.mc_empirical?"checked":""}>
+      Use real (bootstrapped) demand instead of a Normal curve<span class="hint" style="margin:0 0 0 2px"> — for lumpy slow movers the Normal assumption is wrong</span></label>
+    <div class="grid kpis" style="grid-template-columns:repeat(3,1fr)">
+      ${kpiCard("Target service level",pct(S.service_level))}
+      ${kpiCard("Achieved (simulated)",pct(mc.achieved_service_level))}
+      ${kpiCard("Gap",(gap>=0?"+":"")+pct(Math.abs(gap)).replace("%","")+"%","Near zero = well-calibrated",ok?"good":"bad")}
+    </div>
+    <div class="banner ${ok?"good":"warn"}" style="margin-top:14px"><span>${ok?"✓":"⚠"}</span>
+      <div>${ok?"The simulation confirms the formula delivers the service level it promises for this SKU."
+        :"The simulated service level is far from target — the Normal formula is mis-calibrated for this item's demand shape. This is the honest failure mode the reference notebook never surfaces."}</div></div>`;
+  document.getElementById("mc-emp").addEventListener("change",e=>{S.mc_empirical=e.target.checked;renderPanel();});
+}
+
+function renderOptimise(p,{s,Dbar,sigmaD,ss,rop}){
+  // cost curve
+  const levels=[];for(let i=0;i<120;i++)levels.push(0.50+(0.995-0.50)*i/119);
+  const rowsc=levels.map(sl=>totalCost(sl,sigmaD,S.lead_time,Dbar,S.holding,S.stockout,S.lead_std,S.cycles));
+  const holding=rowsc.map(r=>r.holding_cost),stockout=rowsc.map(r=>r.stockout_cost),total=rowsc.map(r=>r.total_cost);
+  let bi=0;for(let i=1;i<total.length;i++)if(total[i]<total[bi])bi=i;
+  const cheapest=levels[bi];
+  // tornado
+  const baseRop=rop;
+  const swings={};
+  const srop=(sl,L,sd,sl2)=>reorderPoint(Dbar,L,safetyStock(sl,sd,L,Dbar,sl2));
+  swings["Lead time"]=[srop(S.service_level,S.lead_time*0.8,sigmaD,S.lead_std),srop(S.service_level,S.lead_time*1.2,sigmaD,S.lead_std)];
+  swings["Service level"]=[srop(Math.max(0.5,S.service_level-0.05),S.lead_time,sigmaD,S.lead_std),srop(Math.min(0.999,S.service_level+0.05),S.lead_time,sigmaD,S.lead_std)];
+  swings["Demand σ_D"]=[srop(S.service_level,S.lead_time,sigmaD*0.8,S.lead_std),srop(S.service_level,S.lead_time,sigmaD*1.2,S.lead_std)];
+  swings["Lead-time variability"]=[srop(S.service_level,S.lead_time,sigmaD,Math.max(0,S.lead_std*0.8)),srop(S.service_level,S.lead_time,sigmaD,S.lead_std*1.2)];
+  const torder=Object.keys(swings).sort((a,b)=>Math.abs(swings[a][1]-swings[a][0])-Math.abs(swings[b][1]-swings[b][0]));
+
+  // bullwhip
+  const weekly=s.weekly_demand.filter(x=>x>0);
+  const sim=bwSimulate(weekly,{leadTime:2,maWindow:4,z:1,sharedInfo:S.bw_shared,aiForecasting:S.bw_ai});
+  const amp=sim.amplification.slice(1);const manuf=amp[amp.length-1];
+
+  p.innerHTML=`
+    <h3 class="section-t" style="margin-top:4px">Where is the cheapest service level?</h3>
+    <div class="card"><div id="cost-chart" class="chart" style="height:330px"></div></div>
+    <p class="cap">Cheapest service level ≈ <b>${pct(cheapest)}</b> (dotted green). Your current setting is the grey dashed line. Raising service buys fewer stockouts at the price of more holding.</p>
+
+    <h3 class="section-t">Cost-optimal service level (constrained search)</h3>
+    <p class="lead">Instead of reading the curve by eye, an optimiser searches it for the cost-minimising service level above a floor you set (an adaptive coarse-to-fine search; unconstrained it lands on the curve's trough).</p>
+    <div class="sub-controls" style="margin-bottom:12px">
+      <div class="field" style="margin:0;min-width:240px;flex:1">
+        <label for="floor">Minimum acceptable service level <span class="val" id="floor-v">${pct(S.opt_floor)}</span></label>
+        <input type="range" id="floor" min="0.50" max="0.99" step="0.01" value="${S.opt_floor}">
+      </div>
+      <button class="btn" id="run-opt">Run optimisation</button>
+    </div>
+    <div id="opt-out"></div>
+
+    <h3 class="section-t">What moves the reorder point most?</h3>
+    <div class="card"><div id="tornado" class="chart" style="height:250px"></div></div>
+    <p class="cap">Longer bars = the reorder point is more sensitive to that input (±20%, service level ±0.05).</p>
+
+    <div class="divider" style="height:1px;background:var(--line);margin:24px 0"></div>
+    <h3 class="section-t" style="margin-top:0">Bullwhip effect: the single source of truth</h3>
+    <p class="lead">A 4-stage chain (Retailer → Manufacturer) driven by <b>this SKU's real weekly demand</b>. Each tier orders with a standard order-up-to rule; the amplification is <b>not</b> hard-coded — it emerges from everyone reacting to the tier below them.</p>
+    <div class="sub-controls" style="margin-bottom:12px">
+      <label class="chk"><input type="checkbox" id="bw-shared" ${S.bw_shared?"checked":""}> Shared POS data (single source of truth)</label>
+      <label class="chk"><input type="checkbox" id="bw-ai" ${S.bw_ai?"checked":""}> AI forecasting at each tier</label>
+    </div>
+    <div class="two">
+      <div class="card"><h4 style="font-size:13px;margin-bottom:8px">Order streams up the chain (last 52 weeks)</h4>
+        <div id="bw-lines" class="chart" style="height:300px"></div></div>
+      <div class="card"><h4 style="font-size:13px;margin-bottom:8px">Variance amplification vs customer demand</h4>
+        <div id="bw-amp" class="chart" style="height:300px"></div></div>
+    </div>
+    <p class="cap">The manufacturer sees about <b>${fmt1(manuf)}×</b> the demand variability the customer actually has. Turn on shared data and AI forecasting to watch it fall.</p>`;
+
+  draw("cost-chart",[
+    {x:levels,y:holding,name:"Holding cost",mode:"lines",line:{color:cssv("--blue"),width:2}},
+    {x:levels,y:stockout,name:"Stockout cost",mode:"lines",line:{color:cssv("--red"),width:2}},
+    {x:levels,y:total,name:"Total cost",mode:"lines",line:{color:cssv("--green"),width:3}}
+  ],{height:330,xaxis:{title:{text:"Service level",font:{size:11}},tickformat:".0%",gridcolor:cssv("--line")},
+     yaxis:{title:{text:"Annual cost ($)",font:{size:11}},gridcolor:cssv("--line")},
+     shapes:[
+       {type:"line",x0:cheapest,x1:cheapest,y0:0,y1:1,yref:"paper",line:{color:cssv("--green"),dash:"dot",width:1.5}},
+       {type:"line",x0:S.service_level,x1:S.service_level,y0:0,y1:1,yref:"paper",line:{color:cssv("--muted"),dash:"dash",width:1}}
+     ]});
+
+  const tbars=torder.map(n=>{const [lo,hi]=swings[n];return {y:[n],x:[hi-lo],base:lo,orientation:"h",type:"bar",
+    marker:{color:cssv("--blue")},showlegend:false,hovertemplate:n+": %{base:.0f} → %{x:.0f}<extra></extra>"};});
+  draw("tornado",tbars,{height:250,barmode:"overlay",xaxis:{title:{text:"Reorder point (units)",font:{size:11}},gridcolor:cssv("--line")},
+    yaxis:{automargin:true},shapes:[{type:"line",x0:baseRop,x1:baseRop,y0:0,y1:1,yref:"paper",line:{color:cssv("--muted"),dash:"dash",width:1}}]});
+
+  const palette=[cssv("--muted"),cssv("--blue"),cssv("--teal"),cssv("--accent"),cssv("--violet")];
+  draw("bw-lines",sim.labels.map((lab,i)=>({y:sim.streams[i].slice(-52),name:lab,mode:"lines",line:{color:palette[i%palette.length],width:i===0?2.4:1.6}})),
+    {height:300,xaxis:{title:{text:"Week",font:{size:11}},gridcolor:cssv("--line")},yaxis:{title:{text:"Orders",font:{size:11}},gridcolor:cssv("--line")}});
+  draw("bw-amp",[{x:sim.labels.slice(1),y:amp,type:"bar",marker:{color:cssv("--violet")},
+    hovertemplate:"%{x}: %{y:.1f}×<extra></extra>"}],
+    {height:300,yaxis:{title:{text:"× customer variance",font:{size:11}},gridcolor:cssv("--line")},xaxis:{tickangle:-20}});
+
+  // opt controls
+  const fl=document.getElementById("floor");
+  fl.addEventListener("input",()=>{S.opt_floor=parseFloat(fl.value);document.getElementById("floor-v").textContent=pct(S.opt_floor);});
+  document.getElementById("run-opt").addEventListener("click",()=>{
+    const r=optimiseServiceLevel(sigmaD,S.lead_time,Dbar,S.holding,S.stockout,S.lead_std,S.cycles,S.opt_floor);
+    document.getElementById("opt-out").innerHTML=`<div class="grid kpis" style="grid-template-columns:repeat(3,1fr);margin-bottom:6px">
+      ${kpiCard("Optimal service level",pct(r.sl))}
+      ${kpiCard("Optimal reorder point",fmt0(r.c.reorder_point)+" u")}
+      ${kpiCard("Minimised annual cost","$"+fmt0(r.c.total_cost),"good")}</div>
+      <p class="cap">Found by adaptive search above your ${pct(S.opt_floor)} floor. With no binding floor it agrees with the curve's trough (${pct(cheapest)}).</p>`;
+  });
+  document.getElementById("bw-shared").addEventListener("change",e=>{S.bw_shared=e.target.checked;renderPanel();});
+  document.getElementById("bw-ai").addEventListener("change",e=>{S.bw_ai=e.target.checked;renderPanel();});
+}
+
+// ============================ theme ============================
+function currentTheme(){const t=document.documentElement.getAttribute("data-theme");
+  if(t)return t;return matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light";}
+function toggleTheme(){const next=currentTheme()==="dark"?"light":"dark";
+  document.documentElement.setAttribute("data-theme",next);
+  try{localStorage.setItem("inv-theme",next);}catch(e){}
+  renderPanel();}
+(function initTheme(){try{const t=localStorage.getItem("inv-theme");if(t)document.documentElement.setAttribute("data-theme",t);}catch(e){}})();
+matchMedia("(prefers-color-scheme:dark)").addEventListener("change",()=>{if(!document.documentElement.getAttribute("data-theme"))renderPanel();});
+
+// ============================ boot ============================
+function boot(){renderShell();renderPanel();}
+if(window.Plotly)boot();
+else{const wait=setInterval(()=>{if(window.Plotly){clearInterval(wait);boot();}},40);
+  setTimeout(()=>{if(!window.Plotly){clearInterval(wait);document.getElementById("app").innerHTML='<div class="loading" style="grid-column:1/-1">Chart library failed to load. Check your connection and refresh.</div>';}},6000);}
+</script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
