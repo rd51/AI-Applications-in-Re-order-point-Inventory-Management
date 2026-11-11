@@ -1,5 +1,7 @@
 # AI Inventory Intelligence Dashboard
 
+**▶ Live dashboard:** https://rd51.github.io/AI-Applications-in-Re-order-point-Inventory-Management/
+
 **AI in Operations — Session II lab.** An interactive, **self-contained HTML dashboard**
 that turns a classical reorder-point calculator into an AI-assisted decision tool, built
 on **real Walmart demand data** (the M5 dataset). It covers demand forecasting, dynamic
